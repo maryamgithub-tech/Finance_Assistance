@@ -115,4 +115,8 @@ _[the why behind the calls above — this is what they read most closely]_
 ---
 
 ## Running it locally
-_[setup steps: env vars, supabase project, schema migration, seed CSV — filled in once the app boots]_
+
+
+-- clone repo 
+-- Run this command : npm install
+-- Run this command : npm run dev
