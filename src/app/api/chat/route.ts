@@ -52,5 +52,14 @@ export async function POST(req: Request) {
     },
   });
 
-  return result.toUIMessageStreamResponse();
+  return result.toUIMessageStreamResponse({
+    onError: (error) => {
+      const msg = error instanceof Error ? error.message : String(error);
+      if (/quota|RESOURCE_EXHAUSTED|rate.?limit|\b429\b|exceeded/i.test(msg)) {
+        return "I've hit today's free request limit on the AI model — it resets in a few hours. Your dashboard and data still work; please try the question again later.";
+      }
+      console.error("[chat] error:", msg);
+      return "Something went wrong while answering. Please try again in a moment.";
+    },
+  });
 }

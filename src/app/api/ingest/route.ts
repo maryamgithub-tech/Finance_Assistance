@@ -28,14 +28,26 @@ export async function POST(req: Request) {
         onConflict: "user_id,dedupe_hash",
         ignoreDuplicates: true,
       });
-    if (error) return Response.json({ error: error.message }, { status: 500 });
+  if (transactions.length > 0) {
+    // Batch inserts so a large statement (thousands of rows) loads reliably.
+    const CHUNK = 500;
+    for (let i = 0; i < transactions.length; i += CHUNK) {
+      const { error } = await supabase
+        .from("transactions")
+        .upsert(transactions.slice(i, i + CHUNK), {
+          onConflict: "user_id,dedupe_hash",
+          ignoreDuplicates: true,
+        });
+      if (error) return Response.json({ error: error.message }, { status: 500 });
+    }
 
     // Refresh deterministic insights (recurring + anomalies) for this user.
-    // Cheap to run on ingest; the assistant then just reads the results.
     await supabase.rpc("refresh_recurring");
     await supabase.rpc("refresh_anomalies");
   }
 
   // Returning the report lets the UI say "imported 19, skipped 4, 1 duplicate".
   return Response.json(report);
+}
+
 }

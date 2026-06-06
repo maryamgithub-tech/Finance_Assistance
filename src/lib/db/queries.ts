@@ -8,7 +8,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 const iso = (d: Date) => d.toISOString().slice(0, 10);
 
-async function latestTxnDate(supabase: SupabaseClient, userId: string): Promise<Date | null> {
+export async function latestTxnDate(supabase: SupabaseClient, userId: string): Promise<Date | null> {
   const { data } = await supabase
     .from("transactions")
     .select("txn_date")
@@ -164,6 +164,29 @@ export async function rememberFact(
   });
   if (error) throw new Error(error.message);
   return { saved: true };
+}
+
+// Spend grouped by category for a period (current month only on the dashboard,
+// so the row set is bounded). Used by the insights panel.
+export async function categoryBreakdown(
+  supabase: SupabaseClient,
+  userId: string,
+  start: string,
+  end: string
+) {
+  const { data, error } = await supabase
+    .from("transactions")
+    .select("category, amount")
+    .eq("user_id", userId)
+    .lt("amount", 0)
+    .gte("txn_date", start)
+    .lte("txn_date", end);
+  if (error) throw new Error(error.message);
+  const map = new Map<string, number>();
+  for (const r of data ?? []) map.set(r.category, (map.get(r.category) ?? 0) + Math.abs(Number(r.amount)));
+  return [...map.entries()]
+    .map(([category, spent]) => ({ category, spent: Math.round(spent) }))
+    .sort((a, b) => b.spent - a.spent);
 }
 
 // Read by the chat route (not a tool) to inject durable memory into the prompt.
