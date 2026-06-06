@@ -132,6 +132,11 @@ alter table recurring_charges enable row level security;
 alter table anomalies         enable row level security;
 alter table receipts          enable row level security;
 
--- One representative policy; the rest follow the same pattern (created in migration).
-create policy "own rows" on transactions
-  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+-- A user can only read/write their own rows. profiles keys on id; the rest on user_id.
+create policy "own rows" on transactions      for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "own rows" on receipts          for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "own rows" on budgets           for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "own rows" on user_facts        for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "own rows" on recurring_charges for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "own rows" on anomalies         for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "own rows" on profiles          for all using (auth.uid() = id)      with check (auth.uid() = id);
