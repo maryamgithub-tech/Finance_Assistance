@@ -1,65 +1,110 @@
-import Image from "next/image";
+"use client";
+
+// TEMPORARY minimal page so steps 3–5 are testable. Real UI comes in step 6.
+import { useChat } from "@ai-sdk/react";
+import { useState } from "react";
+
+type Extracted = {
+  merchant: string; total: number; txn_date: string;
+  currency: string; category: string; confidence: number; notes?: string;
+};
 
 export default function Home() {
+  const [input, setInput] = useState("");
+  const [uploadMsg, setUploadMsg] = useState("");
+  const [receipt, setReceipt] = useState<{ id: string; data: Extracted } | null>(null);
+  const { messages, sendMessage } = useChat();
+
+  async function uploadCsv(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadMsg("Importing…");
+    const body = new FormData();
+    body.append("file", file);
+    const res = await fetch("/api/ingest", { method: "POST", body });
+    const r = await res.json();
+    setUploadMsg(res.ok ? `Imported ${r.inserted}, skipped ${r.skipped?.length ?? 0}, ${r.duplicates} duplicate(s).` : `Error: ${r.error}`);
+  }
+
+  async function uploadReceipt(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadMsg("Reading receipt…");
+    const body = new FormData();
+    body.append("file", file);
+    const res = await fetch("/api/receipt", { method: "POST", body });
+    const r = await res.json();
+    if (!res.ok) return setUploadMsg(`Error: ${r.error}`);
+    setUploadMsg("");
+    setReceipt({ id: r.receipt_id, data: r.extracted });
+  }
+
+  async function confirmReceipt() {
+    if (!receipt) return;
+    const res = await fetch("/api/receipt/confirm", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ receipt_id: receipt.id }),
+    });
+    setUploadMsg(res.ok ? "Receipt saved as an expense." : "Could not save receipt.");
+    setReceipt(null);
+  }
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+    <div className="mx-auto flex min-h-screen max-w-xl flex-col p-6">
+      <div className="mb-4 flex items-center justify-between gap-2">
+        <h1 className="text-lg font-semibold">Finance Assistant (dev)</h1>
+        <div className="flex gap-2">
+          <label className="cursor-pointer rounded border px-3 py-1 text-sm">
+            Upload CSV
+            <input type="file" accept=".csv" className="hidden" onChange={uploadCsv} />
+          </label>
+          <label className="cursor-pointer rounded border px-3 py-1 text-sm">
+            Upload receipt
+            <input type="file" accept="image/*" className="hidden" onChange={uploadReceipt} />
+          </label>
+        </div>
+      </div>
+      {uploadMsg && <p className="mb-3 text-sm text-gray-600">{uploadMsg}</p>}
+
+      {receipt && (
+        <div className="mb-4 rounded border p-3 text-sm">
+          <p className="mb-1 font-medium">
+            Confirm this receipt?{" "}
+            {receipt.data.confidence < 0.5 && (
+              <span className="text-amber-600">(low confidence — please check)</span>
+            )}
           </p>
+          <p>{receipt.data.merchant || "Unknown"} — {receipt.data.currency} {receipt.data.total} — {receipt.data.txn_date || "no date"} — {receipt.data.category}</p>
+          {receipt.data.notes && <p className="text-amber-600">Note: {receipt.data.notes}</p>}
+          <div className="mt-2 flex gap-2">
+            <button className="rounded bg-black px-3 py-1 text-white" onClick={confirmReceipt}>Confirm</button>
+            <button className="rounded border px-3 py-1" onClick={() => setReceipt(null)}>Discard</button>
+          </div>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+      )}
+
+      <div className="flex-1 space-y-3">
+        {messages.map((m) => (
+          <div key={m.id} className="whitespace-pre-wrap">
+            <span className="font-medium">{m.role === "user" ? "You: " : "AI: "}</span>
+            {m.parts.map((p, i) => (p.type === "text" ? <span key={i}>{p.text}</span> : null))}
+          </div>
+        ))}
+      </div>
+
+      <form
+        onSubmit={(e) => { e.preventDefault(); if (!input.trim()) return; sendMessage({ text: input }); setInput(""); }}
+        className="mt-4 flex gap-2"
+      >
+        <input
+          className="flex-1 rounded border p-2"
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          placeholder="Ask about your spending…"
+        />
+        <button className="rounded bg-black px-4 text-white" type="submit">Send</button>
+      </form>
     </div>
   );
 }
